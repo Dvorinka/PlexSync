@@ -928,4 +928,7 @@ def playlist_created():
                          unified_playlist=len(playlists) == 1 and 'source' not in playlists[0])
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    # Allow configuring host/port via environment for Docker
+    port = int(os.getenv('PORT', '5000'))
+    debug = os.getenv('FLASK_DEBUG', '0') == '1'
+    app.run(host='0.0.0.0', port=port, debug=debug)

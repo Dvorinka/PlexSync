@@ -1,0 +1,26 @@
+# Ignore VCS and local environments
+.git
+.venv
+venv
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+
+# IDE/editor
+.vscode
+.idea
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+build
+/dist
+
+# Local scripts
+start.bat
+
+# Uploaded files (will be mounted as a volume at runtime)
+uploads/*
