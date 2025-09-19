@@ -1,0 +1,8 @@
+Flask>=2.0.0,<3.0.0
+Flask-Session>=0.5.0
+python-dotenv>=0.19.0,<1.0.0
+requests>=2.26.0,<3.0.0
+unidecode>=1.2.0,<2.0.0
+PlexAPI>=4.9.2,<5.0.0
+Werkzeug>=2.0.2,<3.0.0
+setuptools>=65.5.1

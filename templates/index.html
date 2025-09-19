@@ -1,0 +1,280 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <div class="text-center mb-5">
+            <h1 class="display-5 fw-bold text-primary mb-3">Plex Playlist Sync</h1>
+            <p class="lead">Sync your Spotify playlists with Plex Music Library</p>
+        </div>
+        
+        <div class="card shadow">
+            <div class="card-header bg-primary text-white">
+                <h2 class="h4 mb-0">Step 1: Connect to Plex</h2>
+            </div>
+            <div class="card-body">
+                <form method="post" enctype="multipart/form-data" id="plexConfigForm">
+                    <div class="mb-4">
+                        <label for="plex_url" class="form-label fw-bold">Plex Server URL</label>
+                        <div class="input-group">
+                            <span class="input-group-text"><i class="bi bi-server"></i></span>
+                            <input type="url" class="form-control form-control-lg" id="plex_url" 
+                                   name="plex_url" value="{{ config.get('PLEX_BASE_URL', '') }}" 
+                                   placeholder="http://localhost:32400" required>
+                        </div>
+                        <div class="form-text">The URL of your Plex server, usually http://localhost:32400 for local servers</div>
+                    </div>
+                    
+                    <div class="mb-4">
+                        <label for="plex_token" class="form-label fw-bold">Plex Authentication Token</label>
+                        <div class="input-group">
+                            <span class="input-group-text"><i class="bi bi-key"></i></span>
+                            <input type="password" class="form-control form-control-lg" id="plex_token" 
+                                   name="plex_token" value="{{ config.get('PLEX_TOKEN', '') }}" required>
+                            <button class="btn btn-outline-secondary" type="button" id="toggleToken">
+                                <i class="bi bi-eye"></i>
+                            </button>
+                            <button class="btn btn-outline-info" type="button" data-bs-toggle="modal" data-bs-target="#tokenHelpModal">
+                                <i class="bi bi-question-circle"></i>
+                            </button>
+                        </div>
+                        <div class="form-text">
+                            <a href="https://support.plex.tv/articles/204059436-finding-an-authentication-token-x-plex-token/" target="_blank" rel="noopener noreferrer">
+                                How to find your Plex token
+                            </a>
+                        </div>
+                    </div>
+                    
+                    <hr class="my-4">
+                    
+                    <div class="mb-4">
+                        <label for="files" class="form-label fw-bold">Spotify Playlist CSV Files</label>
+                        <div class="input-group">
+                            <span class="input-group-text"><i class="bi bi-file-earmark-music"></i></span>
+                            <input class="form-control form-control-lg" type="file" id="files" name="files" accept=".csv" multiple required>
+                        </div>
+                        <div class="form-text">
+                            Export your Spotify playlists as CSV files. You can select multiple files.
+                            <a href="https://exportify.net/" target="_blank">
+                                How to export from Spotify
+                            </a>
+                        </div>
+                        <div id="file-list" class="mt-2">
+                            <!-- Selected files will be listed here -->
+                        </div>
+                    </div>
+                    
+                    <div class="mb-4 form-check form-switch">
+                        <input class="form-check-input" type="checkbox" id="unified-playlist" name="unified_playlist" checked>
+                        <label class="form-check-label" for="unified-playlist">
+                            Create a single unified playlist from all files
+                        </label>
+                        <div class="form-text">
+                            If unchecked, a separate playlist will be created for each file.
+                        </div>
+                    </div>
+                    
+                    <div class="d-grid">
+                        <button type="submit" class="btn btn-primary btn-lg">
+                            <i class="bi bi-arrow-right-circle me-2"></i>Continue to Track Matching
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+        
+        <div class="card mt-4 shadow-sm">
+            <div class="card-header bg-light">
+                <h3 class="h5 mb-0">How It Works</h3>
+            </div>
+            <div class="card-body">
+                <div class="row g-4">
+                    <div class="col-md-4">
+                        <div class="text-center p-3">
+                            <div class="bg-primary bg-opacity-10 text-primary rounded-circle d-inline-flex align-items-center justify-content-center mb-3" style="width: 80px; height: 80px;">
+                                <i class="bi bi-cloud-arrow-up fs-2"></i>
+                            </div>
+                            <h5>1. Upload CSV</h5>
+                            <p class="small text-muted mb-0">Export your Spotify playlist as a CSV file and upload it here</p>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="text-center p-3">
+                            <div class="bg-primary bg-opacity-10 text-primary rounded-circle d-inline-flex align-items-center justify-content-center mb-3" style="width: 80px; height: 80px;">
+                                <i class="bi bi-search fs-2"></i>
+                            </div>
+                            <h5>2. Match Tracks</h5>
+                            <p class="small text-muted mb-0">We'll find matching tracks in your Plex library</p>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="text-center p-3">
+                            <div class="bg-primary bg-opacity-10 text-primary rounded-circle d-inline-flex align-items-center justify-content-center mb-3" style="width: 80px; height: 80px;">
+                                <i class="bi bi-music-note-list fs-2"></i>
+                            </div>
+                            <h5>3. Create Playlist</h5>
+                            <p class="small text-muted mb-0">Generate a new playlist in Plex with your matched tracks</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Token Help Modal -->
+<div class="modal fade" id="tokenHelpModal" tabindex="-1" aria-labelledby="tokenHelpModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title" id="tokenHelpModalLabel">How to Find Your Plex Token</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-info">
+                    <i class="bi bi-info-circle-fill me-2"></i>
+                    Your Plex token is required to access your Plex server. Here's how to find it:
+                </div>
+                
+                <ol class="mb-4">
+                    <li class="mb-2">Sign in to <a href="https://app.plex.tv/desktop" target="_blank">Plex Web</a></li>
+                    <li class="mb-2">Click on your profile icon in the top-right corner</li>
+                    <li class="mb-2">Select <strong>Account Settings</strong></li>
+                    <li class="mb-2">In the left sidebar, click on <strong>Web</strong> under the <em>Account</em> section</li>
+                    <li class="mb-2">Look for the <code>X-Plex-Token</code> in the URL. It should look something like: <code>X-Plex-Token=xxxxxxxxxxxxxxxxxxxx</code></li>
+                    <li>Copy everything after <code>X-Plex-Token=</code></li>
+                </ol>
+                
+                <div class="alert alert-warning">
+                    <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                    <strong>Important:</strong> Keep your token private and never share it with anyone. This token provides access to your Plex server.
+                </div>
+                
+                <p class="mb-0">
+                    <a href="https://support.plex.tv/articles/204059436-finding-an-authentication-token-x-plex-token/" target="_blank" class="btn btn-outline-primary btn-sm">
+                        <i class="bi bi-question-circle me-1"></i> More detailed instructions
+                    </a>
+                </p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-primary" data-bs-dismiss="modal">Got it!</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Toggle token visibility
+        const toggleTokenBtn = document.getElementById('toggleToken');
+        if (toggleTokenBtn) {
+            toggleTokenBtn.addEventListener('click', function() {
+                const tokenInput = document.getElementById('plex_token');
+                const icon = this.querySelector('i');
+                
+                if (tokenInput.type === 'password') {
+                    tokenInput.type = 'text';
+                    icon.classList.remove('bi-eye');
+                    icon.classList.add('bi-eye-slash');
+                } else {
+                    tokenInput.type = 'password';
+                    icon.classList.remove('bi-eye-slash');
+                    icon.classList.add('bi-eye');
+                }
+            });
+        }
+
+        // Handle file selection
+        const fileInput = document.getElementById('files');
+        const fileList = document.getElementById('file-list');
+        
+        if (fileInput && fileList) {
+            fileInput.addEventListener('change', function() {
+                const files = Array.from(this.files);
+                
+                if (files.length === 0) {
+                    fileList.innerHTML = '<div class="text-muted">No files selected</div>';
+                    return;
+                }
+                
+                const list = document.createElement('ul');
+                list.className = 'list-group';
+                
+                files.forEach((file, index) => {
+                    const listItem = document.createElement('li');
+                    listItem.className = 'list-group-item d-flex justify-content-between align-items-center';
+                    
+                    const fileName = document.createElement('span');
+                    fileName.textContent = file.name;
+                    
+                    const fileSize = document.createElement('span');
+                    fileSize.className = 'badge bg-secondary rounded-pill';
+                    fileSize.textContent = formatFileSize(file.size);
+                    
+                    listItem.appendChild(fileName);
+                    listItem.appendChild(fileSize);
+                    list.appendChild(listItem);
+                });
+                
+                fileList.innerHTML = '';
+                fileList.appendChild(list);
+                
+                // Update the playlist name to match the first file if unified playlist is enabled
+                const unifiedCheckbox = document.getElementById('unified-playlist');
+                if (unifiedCheckbox && unifiedCheckbox.checked && files.length > 0) {
+                    const playlistName = files[0].name.replace(/\.[^/.]+$/, '').replace(/_/g, ' ');
+                    document.querySelector('input[name="playlist_name"]').value = playlistName;
+                }
+            });
+        }
+        
+        // Handle unified playlist checkbox change
+        const unifiedCheckbox = document.getElementById('unified-playlist');
+        if (unifiedCheckbox) {
+            unifiedCheckbox.addEventListener('change', function() {
+                const playlistNameInput = document.querySelector('input[name="playlist_name"]');
+                if (this.checked && fileInput.files.length > 0) {
+                    // If switching to unified, set name to first file's name
+                    const playlistName = fileInput.files[0].name.replace(/\.[^/.]+$/, '').replace(/_/g, ' ');
+                    playlistNameInput.value = playlistName;
+                }
+                // If switching to separate playlists, we'll use each file's name later
+            });
+        }
+
+        // Format file size to human readable format
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        // Form submission with loading state and validation
+        const form = document.getElementById('plexConfigForm');
+        if (form) {
+            form.addEventListener('submit', function(e) {
+                const submitBtn = this.querySelector('button[type="submit"]');
+                const fileInput = document.getElementById('files');
+                
+                // Validate files
+                if (fileInput.files.length === 0) {
+                    e.preventDefault();
+                    alert('Please select at least one CSV file');
+                    return;
+                }
+                
+                // Show loading state
+                if (submitBtn) {
+                    submitBtn.disabled = true;
+                    submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Processing...';
+                }
+            });
+        }
+    });
+</script>
+{% endblock %}

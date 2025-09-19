@@ -1,0 +1,158 @@
+{% extends "base.html" %}
+
+{% block extra_head %}
+<style>
+    .playlist-card {
+        transition: transform 0.2s, box-shadow 0.2s;
+    }
+    
+    .playlist-card:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.1) !important;
+    }
+    
+    .playlist-icon {
+        font-size: 2rem;
+        margin-bottom: 1rem;
+    }
+    
+    .stats-badge {
+        font-size: 0.9rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-10">
+        <div class="card shadow">
+            <div class="card-body text-center py-5">
+                <div class="mb-4">
+                    <div class="d-inline-flex align-items-center justify-content-center bg-success bg-opacity-10 rounded-circle p-4 mb-3">
+                        <i class="bi bi-check-circle-fill text-success" style="font-size: 3rem;"></i>
+                    </div>
+                    {% if playlists|length == 1 %}
+                        <h1 class="h3 fw-bold text-success mb-3">Playlist Created Successfully!</h1>
+                        <p class="lead">Your playlist <span class="fw-bold">{{ playlists[0].name }}</span> has been created with <span class="fw-bold">{{ playlists[0].track_count }}</span> tracks.</p>
+                    {% else %}
+                        <h1 class="h3 fw-bold text-success mb-3">{{ playlists|length }} Playlists Created Successfully!</h1>
+                        <p class="lead">All playlists have been created with a total of <span class="fw-bold">{{ playlists|sum(attribute='track_count') }}</span> tracks.</p>
+                    {% endif %}
+                </div>
+                
+                <!-- Playlist Cards -->
+                {% if playlists|length > 1 %}
+                <div class="row g-4 mt-4">
+                    {% for playlist in playlists %}
+                    <div class="col-md-6 col-lg-4">
+                        <div class="card h-100 playlist-card">
+                            <div class="card-body text-center">
+                                <div class="playlist-icon text-primary">
+                                    <i class="bi bi-music-note-list"></i>
+                                </div>
+                                <h5 class="card-title">{{ playlist.name }}</h5>
+                                <p class="text-muted mb-3">
+                                    <span class="badge bg-primary stats-badge">
+                                        <i class="bi bi-music-note-beamed me-1"></i>{{ playlist.track_count }} track{% if playlist.track_count != 1 %}s{% endif %}
+                                    </span>
+                                    {% if playlist.source %}
+                                    <span class="badge bg-secondary stats-badge ms-1" title="Source file: {{ playlist.source }}">
+                                        <i class="bi bi-file-earmark-text me-1"></i>Source
+                                    </span>
+                                    {% endif %}
+                                </p>
+                                <div class="d-grid gap-2">
+                                    <a href="#" class="btn btn-outline-primary btn-sm">
+                                        <i class="bi bi-play-circle me-1"></i> Play in Plex
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+                
+                <!-- Action Buttons -->
+                <div class="d-flex justify-content-center gap-3 mt-5">
+                    <a href="{{ url_for('index') }}" class="btn btn-primary px-4">
+                        <i class="bi bi-house-door me-2"></i>Back to Home
+                    </a>
+                    <a href="{{ url_for('match_tracks') }}" class="btn btn-outline-secondary px-4">
+                        <i class="bi bi-arrow-repeat me-2"></i>Sync Another Playlist
+                    </a>
+                </div>
+                
+                <!-- Quick Actions -->
+                <div class="mt-5 pt-4 border-top">
+                    <h5 class="mb-4">What would you like to do next?</h5>
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <a href="#" class="card h-100 text-decoration-none text-dark hover-shadow">
+                                <div class="card-body text-center">
+                                    <div class="bg-primary bg-opacity-10 text-primary rounded-circle d-inline-flex align-items-center justify-content-center mb-3" style="width: 60px; height: 60px;">
+                                        <i class="bi bi-music-note-list fs-4"></i>
+                                    </div>
+                                    <h6 class="card-title mb-0">View in Plex</h6>
+                                    <small class="text-muted">Open your playlists in Plex</small>
+                                </div>
+                            </a>
+                        </div>
+                        <div class="col-md-4">
+                            <a href="#" class="card h-100 text-decoration-none text-dark hover-shadow">
+                                <div class="card-body text-center">
+                                    <div class="bg-primary bg-opacity-10 text-primary rounded-circle d-inline-flex align-items-center justify-content-center mb-3" style="width: 60px; height: 60px;">
+                                        <i class="bi bi-collection-play fs-4"></i>
+                                    </div>
+                                    <h6 class="card-title mb-0">View All Playlists</h6>
+                                    <small class="text-muted">See all your Plex playlists</small>
+                                </div>
+                            </a>
+                        </div>
+                        <div class="col-md-4">
+                            <a href="{{ url_for('index') }}" class="card h-100 text-decoration-none text-dark hover-shadow">
+                                <div class="card-body text-center">
+                                    <div class="bg-primary bg-opacity-10 text-primary rounded-circle d-inline-flex align-items-center justify-content-center mb-3" style="width: 60px; height: 60px;">
+                                        <i class="bi bi-plus-circle fs-4"></i>
+                                    </div>
+                                    <h6 class="card-title mb-0">Create Another</h6>
+                                    <small class="text-muted">Sync another playlist</small>
+                                </div>
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Add any client-side interactions if needed
+    
+    // Example: Add click handler for the "Play in Plex" buttons
+    document.querySelectorAll('.play-plex-btn').forEach(btn => {
+        btn.addEventListener('click', function(e) {
+            e.preventDefault();
+            const playlistName = this.getAttribute('data-playlist-name');
+            // In a real app, this would open the playlist in Plex
+            alert(`Opening "${playlistName}" in Plex...`);
+        });
+    });
+});
+</script>
+
+<style>
+.hover-shadow {
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.hover-shadow:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15) !important;
+}
+</style>
+{% endblock %}

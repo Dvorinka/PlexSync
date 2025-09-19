@@ -1,0 +1,906 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-10">
+        <div class="card mb-4">
+            <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                <h2 class="h4 mb-0">Playlist Sync Configuration</h2>
+                <a href="{{ url_for('index') }}" class="btn btn-outline-light btn-sm">
+                    <i class="bi bi-arrow-left me-1"></i> Back
+                </a>
+            </div>
+            <div class="card-body">
+                <form method="post" class="mb-4">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h5 class="border-bottom pb-2 mb-3">Connection Settings</h5>
+                            <div class="mb-3">
+                                <label for="plex_url" class="form-label">Plex Server URL</label>
+                                <input type="url" class="form-control" id="plex_url" name="plex_url" 
+                                       value="{{ config.get('PLEX_BASE_URL', '') }}" required>
+                            </div>
+                            <div class="mb-3">
+                                <label for="plex_token" class="form-label">Plex Token</label>
+                                <div class="input-group">
+                                    <input type="password" class="form-control" id="plex_token" 
+                                           name="plex_token" value="{{ config.get('PLEX_TOKEN', '') }}" required>
+                                    <button class="btn btn-outline-secondary" type="button" id="toggleToken">
+                                        <i class="bi bi-eye"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <h5 class="border-bottom pb-2 mb-3">Playlist Settings</h5>
+                            <div class="mb-3">
+                                <label for="library_name" class="form-label">Music Library Name</label>
+                                <input type="text" class="form-control" id="library_name" 
+                                       name="library_name" value="{{ config.get('MUSIC_LIBRARY_NAME', 'Music') }}" required>
+                                <div class="form-text">The name of your music library in Plex</div>
+                            </div>
+                            <div class="mb-3">
+                                <label for="playlist_name" class="form-label">Playlist Name</label>
+                                <input type="text" class="form-control" id="playlist_name" 
+                                       name="playlist_name" value="{{ config.get('PLAYLIST_NAME', 'My Playlist') }}" required>
+                                <div class="form-text">Name for the new playlist in Plex</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="d-grid gap-2 d-md-flex justify-content-md-end mt-3">
+                        <button type="button" class="btn btn-outline-secondary me-2" id="test-connection">
+                            <i class="bi bi-plug me-1"></i> Test Connection
+                        </button>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-save me-1"></i> Save Configuration
+                        </button>
+                    </div>
+                    <div id="connection-status" class="mt-3"></div>
+                </form>
+
+                <div class="row mt-4">
+                    <div class="col-md-6">
+                        <div class="card h-100">
+                            <div class="card-header bg-secondary text-white">
+                                <h5 class="mb-0">File Information</h5>
+                            </div>
+                            <div class="card-body">
+                                <ul class="list-group list-group-flush">
+                                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                                        <span>CSV File:</span>
+                                        <span class="text-end">{{ session.csv_file|basename }}</span>
+                                    </li>
+                                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                                        <span>File Size:</span>
+                                        <span>{{ '%0.2f'|format(session.csv_file|filesize / 1024) }} KB</span>
+                                    </li>
+                                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                                        <span>Last Modified:</span>
+                                        <span>{{ session.csv_file|filemodtime|datetimeformat('%Y-%m-%d %H:%M') }}</span>
+                                    </li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card h-100">
+                            <div class="card-header bg-secondary text-white">
+                                <h5 class="mb-0">Sync Status</h5>
+                            </div>
+                            <div class="card-body d-flex flex-column">
+                                <div id="sync-status" class="mb-3">
+                                    <div class="progress mb-3" style="height: 30px;">
+                                        <div id="progress-bar" class="progress-bar progress-bar-striped progress-bar-animated" 
+                                             role="progressbar" style="width: 0%; font-weight: 500;" 
+                                             aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">0%</div>
+                                    </div>
+                                    <div id="status-text" class="text-center mb-3">
+                                        <i class="bi bi-info-circle me-2"></i> Ready to start sync
+                                    </div>
+                                    <div id="stats" class="text-center mb-4">
+                                        <span id="found" class="badge bg-success rounded-pill me-2 px-3 py-2">
+                                            <i class="bi bi-check-circle me-1"></i> <span id="found-count">0</span> found
+                                        </span>
+                                        <span id="missing" class="badge bg-warning rounded-pill px-3 py-2">
+                                            <i class="bi bi-exclamation-triangle me-1"></i> <span id="missing-count">0</span> missing
+                                        </span>
+                                    </div>
+                                </div>
+                                <div class="mt-auto">
+                                    <button id="start-sync" class="btn btn-primary btn-lg w-100">
+                                        <i class="bi bi-play-fill me-2"></i> Start Sync
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Missing Tracks Section -->
+        <div class="card mt-4" id="missing-tracks-card" style="display: none;">
+            <div class="card-header bg-warning text-dark d-flex justify-content-between align-items-center">
+                <h3 class="h5 mb-0">
+                    <i class="bi bi-exclamation-triangle me-2"></i> Missing Tracks
+                </h3>
+                <span id="missing-count-badge" class="badge bg-dark">0</span>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Track</th>
+                                <th>Artist</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="missing-tracks-list">
+                            <!-- Filled by JavaScript -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Manual Search Modal -->
+        <div class="modal fade" id="searchModal" tabindex="-1" aria-labelledby="searchModalLabel" aria-hidden="true">
+            <div class="modal-dialog modal-lg">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="searchModalLabel">Search for Track in Plex</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="mb-3">
+                            <label for="search-query" class="form-label">Search Query</label>
+                            <div class="input-group">
+                                <input type="text" class="form-control" id="search-query" placeholder="Track name - Artist">
+                                <button class="btn btn-primary" type="button" id="search-button">
+                                    <i class="bi bi-search me-1"></i> Search
+                                </button>
+                            </div>
+                        </div>
+                        <div id="search-results" class="mt-3">
+                            <div class="text-center text-muted py-4">
+                                <i class="bi bi-search d-block mb-2" style="font-size: 2rem;"></i>
+                                <p class="mb-0">Enter a search query to find tracks in your Plex library</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                        <button type="button" class="btn btn-primary" id="add-to-playlist" disabled>
+                            <i class="bi bi-plus-circle me-1"></i> Add to Playlist
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card mt-4">
+            <div class="card-header bg-secondary text-white d-flex justify-content-between align-items-center">
+                <h3 class="h5 mb-0">
+                    <i class="bi bi-card-checklist me-2"></i> Sync Log
+                </h3>
+                <div class="btn-group" role="group">
+                    <button id="clear-log" class="btn btn-sm btn-outline-light">
+                        <i class="bi bi-trash me-1"></i> Clear
+                    </button>
+                    <button id="copy-log" class="btn btn-sm btn-outline-light">
+                        <i class="bi bi-clipboard me-1"></i> Copy
+                    </button>
+                </div>
+            </div>
+            <div class="card-body p-0">
+                <div id="log-container" class="log-container">
+                    <div id="sync-log">
+                        <div class="text-muted text-center py-4">
+                            <i class="bi bi-arrow-repeat d-block mb-2" style="font-size: 2rem;"></i>
+                            <p class="mb-0">Waiting to start sync...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="card-footer text-muted small d-flex justify-content-between align-items-center">
+                <span id="log-count">0 items</span>
+                <span id="last-updated">Never synced</span>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Custom filters for template
+const formatBytes = (bytes, decimals = 2) => {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const dm = decimals < 0 ? 0 : decimals;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+};
+
+// Add formatBytes to window for template use
+window.formatBytes = formatBytes;
+
+document.addEventListener('DOMContentLoaded', function() {
+    // UI Elements
+    const startButton = document.getElementById('start-sync');
+    const syncLog = document.getElementById('sync-log');
+    const progressBar = document.getElementById('progress-bar');
+    const statusText = document.getElementById('status-text');
+    const foundCount = document.getElementById('found-count');
+    const missingCount = document.getElementById('missing-count');
+    const logContainer = document.getElementById('log-container');
+    const clearLogBtn = document.getElementById('clear-log');
+    const copyLogBtn = document.getElementById('copy-log');
+    const logCountEl = document.getElementById('log-count');
+    const lastUpdatedEl = document.getElementById('last-updated');
+    const toggleTokenBtn = document.getElementById('toggleToken');
+    
+    // State
+    let logEntries = 0;
+    let syncInProgress = false;
+    let missingTracks = [];
+    let currentTrack = null;
+    let selectedTrack = null;
+    
+    // Helper functions
+    const formatTime = (date) => {
+        return date.toLocaleTimeString('en-US', {
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: false
+        });
+    };
+    
+    const addLogEntry = (message, type = 'info', data = null) => {
+        const logEntry = document.createElement('div');
+        logEntry.className = `log-entry d-flex align-items-start mb-2`;
+        
+        // Add icon based on type
+        let iconClass = 'bi-info-circle';
+        if (type === 'success') iconClass = 'bi-check-circle';
+        else if (type === 'warning') iconClass = 'bi-exclamation-triangle';
+        else if (type === 'error') iconClass = 'bi-x-circle';
+        
+        logEntry.innerHTML = `
+            <div class="flex-shrink-0 me-2 text-${type}">
+                <i class="bi ${iconClass}"></i>
+            </div>
+            <div class="flex-grow-1">
+                <div class="d-flex justify-content-between">
+                    <span class="fw-medium">${message}</span>
+                    <small class="text-muted ms-2">${formatTime(new Date())}</small>
+                </div>
+                ${data ? `<pre class="text-muted small mt-1 mb-0">${JSON.stringify(data, null, 2)}</pre>` : ''}
+            </div>
+        `;
+        
+        // Add to log
+        syncLog.appendChild(logEntry);
+        logContainer.scrollTop = logContainer.scrollHeight;
+        
+        // Update log count
+        logEntries++;
+        logCountEl.textContent = `${logEntries} ${logEntries === 1 ? 'entry' : 'entries'}`;
+        lastUpdatedEl.textContent = `Last updated: ${new Date().toLocaleString()}`;
+    };
+    
+    // Update progress
+    const updateProgress = (percent, message = '') => {
+        const roundedPercent = Math.round(percent);
+        progressBar.style.width = `${roundedPercent}%`;
+        progressBar.setAttribute('aria-valuenow', roundedPercent);
+        progressBar.textContent = `${roundedPercent}%`;
+        
+        if (message) {
+            statusText.innerHTML = `<i class="bi ${syncInProgress ? 'bi-arrow-repeat spin' : 'bi-info-circle'} me-2"></i> ${message}`;
+        }
+        
+        // Update progress bar color based on completion
+        progressBar.classList.remove('bg-success', 'bg-warning', 'bg-danger');
+        if (roundedPercent >= 90) progressBar.classList.add('bg-success');
+        else if (roundedPercent >= 50) progressBar.classList.add('bg-primary');
+        else progressBar.classList.add('bg-info');
+    };
+    
+    // Update stats
+    const updateStats = (found, missing) => {
+        foundCount.textContent = found;
+        missingCount.textContent = missing;
+        
+        // Update badges
+        document.getElementById('found').classList.toggle('bg-success', found > 0);
+        document.getElementById('missing').classList.toggle('bg-warning', missing > 0);
+    };
+    
+    // Test Plex connection
+    const testConnection = async () => {
+        const url = document.getElementById('plex_url').value;
+        const token = document.getElementById('plex_token').value;
+        const statusEl = document.getElementById('connection-status');
+        
+        if (!url || !token) {
+            statusEl.innerHTML = `
+                <div class="alert alert-warning mb-0">
+                    <i class="bi bi-exclamation-triangle me-2"></i>
+                    Please enter both Plex URL and token
+                </div>
+            `;
+            return;
+        }
+        
+        statusEl.innerHTML = `
+            <div class="alert alert-info mb-0">
+                <div class="spinner-border spinner-border-sm me-2" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+                Testing connection to Plex server...
+            </div>
+        `;
+        
+        try {
+            const response = await fetch('/test_connection', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ plex_url: url, plex_token: token })
+            });
+            
+            const result = await response.json();
+            
+            if (result.success) {
+                statusEl.innerHTML = `
+                    <div class="alert alert-success mb-0">
+                        <i class="bi bi-check-circle me-2"></i>
+                        Successfully connected to Plex server! ${result.server_name ? `(${result.server_name})` : ''}
+                    </div>
+                `;
+            } else {
+                throw new Error(result.message || 'Connection failed');
+            }
+        } catch (error) {
+            console.error('Connection test failed:', error);
+            statusEl.innerHTML = `
+                <div class="alert alert-danger mb-0">
+                    <i class="bi bi-x-circle me-2"></i>
+                    Connection failed: ${error.message}
+                </div>
+            `;
+        }
+    };
+    
+    // Show missing tracks in the UI
+    const showMissingTracks = (tracks) => {
+        missingTracks = tracks;
+        const container = document.getElementById('missing-tracks-list');
+        const card = document.getElementById('missing-tracks-card');
+        const countBadge = document.getElementById('missing-count-badge');
+        
+        if (!tracks || tracks.length === 0) {
+            card.style.display = 'none';
+            return;
+        }
+        
+        // Update count
+        countBadge.textContent = tracks.length;
+        
+        // Clear existing rows
+        container.innerHTML = '';
+        
+        // Add each missing track
+        tracks.forEach((track, index) => {
+            const row = document.createElement('tr');
+            row.dataset.index = index;
+            
+            row.innerHTML = `
+                <td>${track.title || 'Unknown'}</td>
+                <td>${track.artist || 'Unknown'}</td>
+                <td>
+                    <span class="badge bg-warning text-dark">
+                        <i class="bi bi-exclamation-triangle me-1"></i> Missing
+                    </span>
+                </td>
+                <td>
+                    <button class="btn btn-sm btn-outline-primary search-track" data-index="${index}">
+                        <i class="bi bi-search me-1"></i> Find in Plex
+                    </button>
+                </td>
+            `;
+            
+            container.appendChild(row);
+        });
+        
+        // Show the card
+        card.style.display = 'block';
+        
+        // Add event listeners to search buttons
+        document.querySelectorAll('.search-track').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const index = e.target.closest('button').dataset.index;
+                openSearchModal(missingTracks[index]);
+            });
+        });
+    };
+    
+    // Open search modal for a track
+    const openSearchModal = (track) => {
+        currentTrack = track;
+        const modal = new bootstrap.Modal(document.getElementById('searchModal'));
+        const query = `${track.title} ${track.artist}`.trim();
+        
+        // Set initial search query
+        document.getElementById('search-query').value = query;
+        
+        // Clear previous results
+        document.getElementById('search-results').innerHTML = `
+            <div class="text-center text-muted py-4">
+                <i class="bi bi-search d-block mb-2" style="font-size: 2rem;"></i>
+                <p class="mb-0">Enter a search query to find tracks in your Plex library</p>
+            </div>
+        `;
+        
+        // Disable add button until a track is selected
+        document.getElementById('add-to-playlist').disabled = true;
+        
+        // Show modal and trigger search if we have a query
+        modal.show();
+        if (query) {
+            searchPlex(query);
+        }
+    };
+    
+    // Search Plex library
+    const searchPlex = async (query) => {
+        const resultsEl = document.getElementById('search-results');
+        resultsEl.innerHTML = `
+            <div class="text-center py-4">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Searching...</span>
+                </div>
+                <p class="mt-2 mb-0">Searching for "${query}" in your Plex library...</p>
+            </div>
+        `;
+        
+        try {
+            const response = await fetch('/search_plex', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ query })
+            });
+            
+            const data = await response.json();
+            
+            if (!data.success) {
+                throw new Error(data.message || 'Search failed');
+            }
+            
+            if (data.results.length === 0) {
+                resultsEl.innerHTML = `
+                    <div class="text-center text-muted py-4">
+                        <i class="bi bi-search d-block mb-2" style="font-size: 2rem;"></i>
+                        <p class="mb-0">No results found for "${query}"</p>
+                        <p class="small">Try a different search term or check your library</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            // Display search results
+            let html = '<div class="list-group">';
+            data.results.forEach((track, index) => {
+                const isSelected = selectedTrack && selectedTrack.ratingKey === track.ratingKey;
+                
+                html += `
+                    <div class="list-group-item list-group-item-action ${isSelected ? 'active' : ''}" 
+                         data-track='${JSON.stringify(track)}' 
+                         style="cursor: pointer;">
+                        <div class="d-flex w-100 justify-content-between">
+                            <h6 class="mb-1">${track.title || 'Unknown'}</h6>
+                            <small>${track.duration || ''}</small>
+                        </div>
+                        <p class="mb-1">${track.artist || 'Unknown'} • ${track.album || 'Unknown'}</p>
+                        <small>${track.year || ''} • ${track.albumArtist || ''}</small>
+                    </div>
+                `;
+            });
+            html += '</div>';
+            
+            resultsEl.innerHTML = html;
+            
+            // Add click handlers to search results
+            resultsEl.querySelectorAll('.list-group-item').forEach(item => {
+                item.addEventListener('click', () => {
+                    // Remove active class from all items
+                    resultsEl.querySelectorAll('.list-group-item').forEach(i => {
+                        i.classList.remove('active');
+                    });
+                    
+                    // Add active class to selected item
+                    item.classList.add('active');
+                    
+                    // Store selected track
+                    selectedTrack = JSON.parse(item.dataset.track);
+                    
+                    // Enable add button
+                    document.getElementById('add-to-playlist').disabled = false;
+                });
+            });
+            
+        } catch (error) {
+            console.error('Search failed:', error);
+            resultsEl.innerHTML = `
+                <div class="alert alert-danger">
+                    <i class="bi bi-exclamation-triangle me-2"></i>
+                    Search failed: ${error.message}
+                </div>
+            `;
+        }
+    };
+    
+    // Add track to playlist
+    const addToPlaylist = async () => {
+        if (!selectedTrack || !currentTrack) return;
+        
+        const addButton = document.getElementById('add-to-playlist');
+        const originalText = addButton.innerHTML;
+        
+        try {
+            // Update button state
+            addButton.disabled = true;
+            addButton.innerHTML = `
+                <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                Adding...
+            `;
+            
+            // Call server to add track to playlist
+            const response = await fetch('/add_to_playlist', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    track_key: selectedTrack.ratingKey,
+                    original_track: currentTrack
+                })
+            });
+            
+            const result = await response.json();
+            
+            if (!result.success) {
+                throw new Error(result.message || 'Failed to add track to playlist');
+            }
+            
+            // Show success message
+            addLogEntry(`✓ Added "${selectedTrack.title}" to playlist`, 'success');
+            
+            // Update missing tracks list
+            const index = missingTracks.findIndex(t => 
+                t.title === currentTrack.title && t.artist === currentTrack.artist
+            );
+            
+            if (index !== -1) {
+                missingTracks.splice(index, 1);
+                showMissingTracks(missingTracks);
+                
+                // Update counters
+                const foundCount = parseInt(document.getElementById('found-count').textContent) + 1;
+                const missingCount = parseInt(document.getElementById('missing-count').textContent) - 1;
+                updateStats(foundCount, missingCount);
+            }
+            
+            // Close modal
+            const modal = bootstrap.Modal.getInstance(document.getElementById('searchModal'));
+            modal.hide();
+            
+        } catch (error) {
+            console.error('Failed to add track:', error);
+            addLogEntry(`✗ Failed to add track: ${error.message}`, 'error');
+            
+            // Reset button
+            addButton.disabled = false;
+            addButton.innerHTML = originalText;
+            
+            // Show error in modal
+            const resultsEl = document.getElementById('search-results');
+            const errorEl = document.createElement('div');
+            errorEl.className = 'alert alert-danger mt-3 mb-0';
+            errorEl.innerHTML = `
+                <i class="bi bi-exclamation-triangle me-2"></i>
+                Failed to add track: ${error.message}
+            `;
+            resultsEl.prepend(errorEl);
+        }
+    };
+    
+    // Toggle token visibility
+    if (toggleTokenBtn) {
+        toggleTokenBtn.addEventListener('click', () => {
+            const tokenInput = document.getElementById('plex_token');
+            const icon = toggleTokenBtn.querySelector('i');
+            
+            if (tokenInput.type === 'password') {
+                tokenInput.type = 'text';
+                icon.classList.remove('bi-eye');
+                icon.classList.add('bi-eye-slash');
+            } else {
+                tokenInput.type = 'password';
+                icon.classList.remove('bi-eye-slash');
+                icon.classList.add('bi-eye');
+            }
+        });
+    }
+    
+    // Clear log
+    if (clearLogBtn) {
+        clearLogBtn.addEventListener('click', () => {
+            syncLog.innerHTML = `
+                <div class="text-muted text-center py-4">
+                    <i class="bi bi-arrow-repeat d-block mb-2" style="font-size: 2rem;"></i>
+                    <p class="mb-0">Log cleared. Ready for next sync...</p>
+                </div>
+            `;
+            logEntries = 0;
+            logCountEl.textContent = '0 entries';
+        });
+    }
+    
+    // Copy log to clipboard
+    if (copyLogBtn) {
+        copyLogBtn.addEventListener('click', async () => {
+            try {
+                const logText = Array.from(syncLog.children)
+                    .map(el => el.textContent?.trim())
+                    .filter(Boolean)
+                    .join('\n\n');
+                
+                await navigator.clipboard.writeText(logText);
+                
+                // Show success feedback
+                const originalText = copyLogBtn.innerHTML;
+                copyLogBtn.innerHTML = '<i class="bi bi-check2 me-1"></i> Copied!';
+                setTimeout(() => {
+                    copyLogBtn.innerHTML = originalText;
+                }, 2000);
+                
+                addLogEntry('Log copied to clipboard', 'success');
+            } catch (err) {
+                addLogEntry('Failed to copy log to clipboard', 'error');
+                console.error('Failed to copy log:', err);
+            }
+        });
+    }
+    
+    // Start sync process
+    startButton.addEventListener('click', async function() {
+        if (syncInProgress) {
+            addLogEntry('Sync is already in progress', 'warning');
+            return;
+        }
+        
+        syncInProgress = true;
+        startButton.disabled = true;
+        startButton.innerHTML = `
+            <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+            Syncing...
+        `;
+        
+        // Clear previous logs if not already populated
+        if (logEntries === 0) {
+            syncLog.innerHTML = '';
+        }
+        
+        updateProgress(0, 'Initializing sync...');
+        updateStats(0, 0);
+        
+        // Add animation to progress bar
+        progressBar.classList.add('progress-bar-animated');
+        
+        try {
+            addLogEntry('Starting playlist sync...', 'info');
+            
+            const response = await fetch('/run_sync', { 
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    playlist_name: document.getElementById('playlist_name').value
+                })
+            });
+            
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let buffer = '';
+            
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                
+                // Process the chunk of data
+                buffer += decoder.decode(value, { stream: true });
+                
+                // Process complete JSON objects from the buffer
+                let boundary;
+                while ((boundary = buffer.indexOf('\n')) !== -1) {
+                    const line = buffer.substring(0, boundary).trim();
+                    buffer = buffer.substring(boundary + 1);
+                    
+                    if (!line) continue;
+                    
+                    try {
+                        const data = JSON.parse(line);
+                        
+                        if (data.progress !== undefined) {
+                            updateProgress(data.progress, data.message || 'Syncing...');
+                        }
+                        
+                        if (data.status === 'processing') {
+                            addLogEntry(`Processing: ${data.track}`, 'info');
+                        }
+                        else if (data.status === 'found') {
+                            addLogEntry(`✓ Found: ${data.track} → ${data.match}`, 'success');
+                            updateStats(parseInt(foundCount.textContent) + 1, parseInt(missingCount.textContent));
+                        }
+                        else if (data.status === 'missing') {
+                            addLogEntry(`⚠ Missing: ${data.track}`, 'warning');
+                            updateStats(parseInt(foundCount.textContent), parseInt(missingCount.textContent) + 1);
+                        }
+                        else if (data.status === 'error') {
+                            addLogEntry(`✗ Error: ${data.message}`, 'error', data.details);
+                        }
+                        else if (data.status === 'missing_tracks') {
+                            // Show missing tracks in the UI
+                            showMissingTracks(data.missing_tracks);
+                            
+                            // Update progress and stats
+                            updateProgress(100, 'Sync completed with missing tracks');
+                            updateStats(data.found || 0, data.missing_tracks?.length || 0);
+                            
+                            // Add summary with warning
+                            const summary = document.createElement('div');
+                            summary.className = 'alert alert-warning mt-3';
+                            summary.innerHTML = `
+                                <h5><i class="bi bi-exclamation-triangle me-2"></i> Sync Completed with Missing Tracks</h5>
+                                <p>Processed ${(data.found || 0) + (data.missing_tracks?.length || 0)} tracks:</p>
+                                <ul class="mb-0">
+                                    <li class="text-success">
+                                        <i class="bi bi-check-circle-fill me-2"></i>
+                                        ${data.found || 0} tracks added to playlist
+                                    </li>
+                                    <li class="text-warning">
+                                        <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                                        ${data.missing_tracks?.length || 0} tracks not found in library
+                                    </li>
+                                </ul>
+                                <div class="mt-2">
+                                    <button class="btn btn-sm btn-outline-warning" id="show-missing-tracks">
+                                        <i class="bi bi-list-ul me-1"></i> Show Missing Tracks
+                                    </button>
+                                </div>
+                            `;
+                            syncLog.appendChild(summary);
+                            
+                            // Scroll to show summary
+                            summary.scrollIntoView({ behavior: 'smooth' });
+                            
+                            // Add click handler for show missing tracks button
+                            document.getElementById('show-missing-tracks')?.addEventListener('click', () => {
+                                const missingTracksCard = document.getElementById('missing-tracks-card');
+                                missingTracksCard.scrollIntoView({ behavior: 'smooth' });
+                            });
+                            
+                            addLogEntry(`Sync completed with ${data.missing_tracks?.length || 0} missing tracks`, 'warning');
+                        }
+                        else if (data.status === 'completed') {
+                            updateProgress(100, 'Sync completed!');
+                            updateStats(data.found || 0, 0);
+                            
+                            // Add summary
+                            const summary = document.createElement('div');
+                            summary.className = 'alert alert-success mt-3';
+                            summary.innerHTML = `
+                                <h5><i class="bi bi-check-circle me-2"></i> Sync Completed Successfully</h5>
+                                <p>Successfully processed ${data.found || 0} tracks:</p>
+                                <ul class="mb-0">
+                                    <li class="text-success">
+                                        <i class="bi bi-check-circle-fill me-2"></i>
+                                        ${data.found || 0} tracks added to playlist
+                                    </li>
+                                </ul>
+                            `;
+                            syncLog.appendChild(summary);
+                            
+                            // Scroll to show summary
+                            summary.scrollIntoView({ behavior: 'smooth' });
+                            
+                            addLogEntry(`Sync completed successfully! All tracks were added to the playlist.`, 'success');
+                        }
+                    } catch (e) {
+                        console.error('Error parsing JSON:', e, 'Line:', line);
+                    }
+                }
+            }
+            
+        } catch (error) {
+            console.error('Sync error:', error);
+            updateProgress(0, 'Sync failed');
+            addLogEntry(`Sync failed: ${error.message}`, 'error', error.stack);
+            
+            // Show error to user
+            const errorAlert = document.createElement('div');
+            errorAlert.className = 'alert alert-danger mt-3';
+            errorAlert.innerHTML = `
+                <h5><i class="bi bi-x-circle-fill me-2"></i> Sync Failed</h5>
+                <p class="mb-1">${error.message}</p>
+                <button class="btn btn-sm btn-outline-danger mt-2" onclick="this.nextElementSibling.classList.toggle('d-none')">
+                    Show details
+                </button>
+                <pre class="d-none small bg-dark text-light p-2 rounded mt-2">${error.stack || 'No stack trace available'}</pre>
+            `;
+            syncLog.appendChild(errorAlert);
+            
+        } finally {
+            syncInProgress = false;
+            startButton.disabled = false;
+            startButton.innerHTML = `
+                <i class="bi bi-arrow-repeat me-2"></i> Sync Again
+            `;
+            progressBar.classList.remove('progress-bar-animated');
+            
+            // Update last updated time
+            lastUpdatedEl.textContent = `Last updated: ${new Date().toLocaleString()}`;
+        }
+    });
+    // Add spin animation class
+    const style = document.createElement('style');
+    style.textContent = `
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .spin {
+            animation: spin 1s linear infinite;
+            display: inline-block;
+        }
+        .log-entry {
+            border-left: 3px solid transparent;
+            padding: 0.5rem 1rem;
+            margin-left: -1rem;
+            margin-right: -1rem;
+        }
+        .log-entry:hover {
+            background-color: rgba(0, 0, 0, 0.02);
+        }
+        .log-entry.text-success {
+            border-left-color: #198754;
+        }
+        .log-entry.text-warning {
+            border-left-color: #ffc107;
+        }
+        .log-entry.text-danger {
+            border-left-color: #dc3545;
+        }
+        .log-entry.text-info {
+            border-left-color: #0dcaf0;
+        }
+        pre {
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            margin: 0.5rem 0 0;
+            font-size: 0.8em;
+            line-height: 1.4;
+        }
+    `;
+    document.head.appendChild(style);
+});
+</script>
+{% endblock %}

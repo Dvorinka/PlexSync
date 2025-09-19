@@ -1,0 +1,646 @@
+{% extends "base.html" %}
+
+{% block extra_head %}
+<style>
+    .progress-container {
+        height: 1.5rem;
+    }
+    
+    .search-result-item {
+        cursor: pointer;
+        transition: background-color 0.2s;
+    }
+    
+    .search-result-item:hover {
+        background-color: #f8f9fa;
+    }
+    
+    .file-card {
+        transition: all 0.2s;
+    }
+    
+    .file-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15) !important;
+    }
+    
+    .file-icon {
+        font-size: 2rem;
+        margin-bottom: 1rem;
+    }
+    
+    .playlist-option-card {
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+    
+    .playlist-option-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.1) !important;
+    }
+    
+    .playlist-option-card.active {
+        border-color: #0d6efd;
+        background-color: #f8f9ff;
+    }
+    
+    .playlist-option-card.active .form-check-input:checked {
+        background-color: #0d6efd;
+        border-color: #0d6efd;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-10">
+        <div class="text-center mb-4">
+            <h1 class="display-5 fw-bold text-primary mb-2">Track Matching</h1>
+            
+            {% if unified_playlist %}
+                <p class="lead">We'll create <span class="badge bg-primary">1 unified playlist</span> from <span class="badge bg-secondary">{{ uploaded_files|length }} files</span></p>
+            {% else %}
+                <p class="lead">We'll create <span class="badge bg-primary">{{ uploaded_files|length }} playlists</span> (one per file)</p>
+            {% endif %}
+            
+            <p class="lead">Found <span class="badge bg-success">{{ found_count }}</span> out of <span class="badge bg-secondary">{{ total_tracks }}</span> tracks in your Plex library</p>
+            
+            <div class="alert alert-info d-flex align-items-center mt-3" role="alert">
+                <i class="bi bi-info-circle-fill me-2"></i>
+                <div>
+                    Need to export your Spotify playlists? 
+                    <a href="https://www.exportify.net/" target="_blank" class="alert-link">Exportify</a> 
+                    lets you export your playlists as CSV files that work with this tool.
+                </div>
+            </div>
+            
+            {% set total_missing = (total_tracks - found_count) %}
+            {% if total_missing > 0 %}
+            <div class="alert alert-warning">
+                <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                <strong>{{ total_missing }} tracks not found</strong> in your Plex library. 
+                You can search for them manually below.
+            </div>
+            {% else %}
+            <div class="alert alert-success">
+                <i class="bi bi-check-circle-fill me-2"></i>
+                All tracks were found in your Plex library! Click "Create Playlist" to continue.
+            </div>
+            {% endif %}
+            
+            {% set progress_percent = (found_count / total_tracks * 100)|round|int %}
+            <div class="progress mb-4 progress-container">
+                <div id="progressBar" class="progress-bar bg-success" 
+                    role="progressbar" 
+                    aria-valuenow="{{ progress_percent }}" 
+                    aria-valuemin="0" 
+                    aria-valuemax="100">
+                    {{ progress_percent }}%
+                </div>
+            </div>
+        </div>
+        
+        {% for group in missing_by_file %}
+        {% set file_id = (group.filename | replace('.', '_') | replace(' ', '_')) %}
+        <div class="card shadow mb-4" id="file-card-{{ file_id }}">
+            <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">Missing Tracks — {{ group.playlist_name }}</h5>
+                <span class="badge bg-warning text-dark file-missing-badge" data-file-id="{{ file_id }}">{{ group.missing_count }}</span>
+            </div>
+            <div class="card-body p-0">
+                {% if group.missing_tracks %}
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>#</th>
+                                <th>Track</th>
+                                <th>Artist</th>
+                                <th>Album</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for track in group.missing_tracks %}
+                            <tr id="track-{{ file_id }}-{{ loop.index }}" class="align-middle">
+                                <td>{{ loop.index }}</td>
+                                <td class="fw-bold">{{ track.get('Track Name', '') }}</td>
+                                <td>{{ track.get('Artist Name(s)', '') }}</td>
+                                <td>{{ track.get('Album Name', '') }}</td>
+                                <td>
+                                    <button class="btn btn-sm btn-outline-primary search-track" 
+                                            data-track-name="{{ track.get('Track Name', '') | e }}" 
+                                            data-artist-name="{{ track.get('Artist Name(s)', '') | e }}"
+                                            data-track-id="{{ loop.index }}"
+                                            data-file-id="{{ file_id }}">
+                                        <i class="bi bi-search me-1"></i> Search
+                                    </button>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="text-center p-4">
+                    <i class="bi bi-check-circle text-success" style="font-size: 2rem;"></i>
+                    <p class="mt-2 mb-0">All tracks were found in this file.</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+        
+        <!-- Uploaded Files Summary -->
+        <div class="card shadow mb-4">
+            <div class="card-header bg-light">
+                <h5 class="mb-0">Uploaded Files</h5>
+            </div>
+            <div class="card-body">
+                <div class="row g-3">
+                    {% for file in uploaded_files %}
+                    <div class="col-md-6 col-lg-4">
+                        <div class="card h-100 file-card">
+                            <div class="card-body text-center">
+                                <div class="file-icon text-primary">
+                                    <i class="bi bi-file-earmark-music"></i>
+                                </div>
+                                <h6 class="card-title text-truncate" title="{{ file.filename }}">
+                                    {{ file.filename }}
+                                </h6>
+                                <p class="card-text small text-muted mb-1">
+                                    {{ file.track_count }} track{% if file.track_count != 1 %}s{% endif %}
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+        
+        <!-- Playlist Creation Options -->
+        <div class="card shadow mb-4">
+            <div class="card-header bg-light">
+                <h5 class="mb-0">Playlist Creation Options</h5>
+            </div>
+            <div class="card-body">
+                <form id="playlistForm" method="post" action="{{ url_for('create_playlist') }}">
+                    {% if file_mode %}
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <div>
+                            <span class="badge bg-secondary">File {{ file_index + 1 }} of {{ total_files }}</span>
+                        </div>
+                        <div class="text-muted small">You'll be taken to the next file after creating this playlist.</div>
+                    </div>
+                    <input type="hidden" name="file_index" value="{{ file_index }}">
+                    <div class="mb-3">
+                        <label for="playlist_name" class="form-label">Playlist Name</label>
+                        <input type="text" class="form-control" id="playlist_name" name="playlist_name" 
+                               value="{{ missing_by_file[0].playlist_name }}" required>
+                        <div class="form-text">You can rename this playlist before creating it.</div>
+                    </div>
+                    <div class="form-check mb-3">
+                        <input class="form-check-input" type="checkbox" id="onlySelected" name="only_selected">
+                        <label class="form-check-label" for="onlySelected">
+                            Only add selected matches (skip auto-search for remaining tracks)
+                        </label>
+                    </div>
+                    {% elif unified_playlist %}
+                    <div class="mb-3">
+                        <label for="playlist_name" class="form-label">Playlist Name</label>
+                        <input type="text" class="form-control" id="playlist_name" name="playlist_name" 
+                               value="{{ config.PLAYLIST_NAME }}" required>
+                    </div>
+                    {% else %}
+                    <p class="text-muted">Each file will be created as a separate playlist with its filename as the playlist name.</p>
+                    {% endif %}
+                    
+                    <div class="d-flex justify-content-between mt-4">
+                        <a href="{{ url_for('index') }}" class="btn btn-outline-secondary">
+                            <i class="bi bi-arrow-left me-1"></i> Back
+                        </a>
+                        <div>
+                            <button type="submit" class="btn btn-primary" id="startSyncBtn">
+                                <i class="bi bi-music-note-list me-1"></i> 
+                                {% if file_mode %}
+                                    Create This Playlist
+                                {% elif unified_playlist %}
+                                    Create Unified Playlist
+                                {% else %}
+                                    Create {{ uploaded_files|length }} Playlists
+                                {% endif %}
+                            </button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Search Modal -->
+<div class="modal fade" id="searchModal" tabindex="-1" aria-labelledby="searchModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title" id="searchModalLabel">Search for Track</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label for="searchQuery" class="form-label">Search for track in Plex</label>
+                    <div class="input-group">
+                        <input type="text" class="form-control" id="searchQuery" placeholder="Search by track name, artist, or album">
+                        <button class="btn btn-primary" type="button" id="searchButton">
+                            <i class="bi bi-search"></i> Search
+                        </button>
+                    </div>
+                    <div class="form-text">Searching in: <span id="searchingFor" class="fw-bold"></span></div>
+                </div>
+                
+                <div id="searchResults" class="mt-3">
+                    <div class="text-center text-muted py-4">
+                        <i class="bi bi-search" style="font-size: 2rem;"></i>
+                        <p class="mt-2">Enter a search term to find matching tracks in your Plex library</p>
+                    </div>
+                </div>
+                
+                <div id="selectedTrackInfo" class="mt-3 d-none">
+                    <hr>
+                    <h6>Selected Track</h6>
+                    <div class="card">
+                        <div class="card-body" id="selectedTrackDetails">
+                            <!-- Selected track will be shown here -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <input type="hidden" id="currentTrackId">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="confirmTrackBtn" disabled>Confirm Selection</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const searchModal = new bootstrap.Modal(document.getElementById('searchModal'));
+    let selectedTrack = null;
+    let currentFileId = null;
+    
+    // Handle search track button clicks
+    document.querySelectorAll('.search-track').forEach(button => {
+        button.addEventListener('click', function() {
+            const trackName = this.getAttribute('data-track-name');
+            const artistName = this.getAttribute('data-artist-name');
+            const trackId = this.getAttribute('data-track-id');
+            const fileId = this.getAttribute('data-file-id');
+            
+            document.getElementById('searchQuery').value = trackName + ' ' + artistName;
+            document.getElementById('searchingFor').textContent = '\"' + trackName + '\" by ' + artistName;
+            document.getElementById('currentTrackId').value = trackId;
+            document.getElementById('currentTrackId').setAttribute('data-file-id', fileId || '');
+            currentFileId = fileId || '';
+            document.getElementById('searchResults').innerHTML = 
+                '<div class="text-center py-4">' +
+                '  <div class="spinner-border text-primary" role="status">' +
+                '    <span class="visually-hidden">Loading...</span>' +
+                '  </div>' +
+                '  <p class="mt-2">Searching for \"' + trackName + '\" by ' + artistName + '...</p>' +
+                '</div>';
+            
+            // Reset selected track
+            selectedTrack = null;
+            document.getElementById('confirmTrackBtn').disabled = true;
+            document.getElementById('selectedTrackInfo').classList.add('d-none');
+            
+            // Show modal and trigger search
+            searchModal.show();
+            performSearch(trackName, artistName);
+        });
+    });
+    
+    // Handle search button click
+    document.getElementById('searchButton').addEventListener('click', function() {
+        const query = document.getElementById('searchQuery').value.trim();
+        if (query) {
+            performSearch(query);
+        }
+    });
+    
+    // Handle search on Enter key
+    document.getElementById('searchQuery').addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            const query = this.value.trim();
+            if (query) {
+                performSearch(query);
+            }
+        }
+    });
+    
+    // Handle track selection
+    document.getElementById('searchResults').addEventListener('click', function(e) {
+        const resultItem = e.target.closest('.search-result-item');
+        if (resultItem) {
+            // Remove active class from all items
+            document.querySelectorAll('.search-result-item').forEach(item => {
+                item.classList.remove('active');
+            });
+            
+            // Add active class to selected item
+            resultItem.classList.add('active');
+            
+            // Store selected track data
+            selectedTrack = {
+                title: resultItem.getAttribute('data-title'),
+                artist: resultItem.getAttribute('data-artist'),
+                album: resultItem.getAttribute('data-album'),
+                ratingKey: resultItem.getAttribute('data-rating-key'),
+                thumb: resultItem.getAttribute('data-thumb')
+            };
+            
+            // Update selected track info
+            const thumbHtml = selectedTrack.thumb ? 
+                '<img src="' + selectedTrack.thumb + '" class="img-thumbnail me-3" style="max-height: 80px;">' : '';
+                
+            document.getElementById('selectedTrackDetails').innerHTML = 
+                '<div class="d-flex align-items-center">' +
+                '  ' + thumbHtml +
+                '  <div>' +
+                '    <h5 class="mb-1">' + selectedTrack.title + '</h5>' +
+                '    <p class="mb-1 text-muted">' + selectedTrack.artist + '</p>' +
+                '    <p class="mb-0 small">' + (selectedTrack.album || 'No album') + '</p>' +
+                '  </div>' +
+                '</div>';
+                
+            document.getElementById('selectedTrackInfo').classList.remove('d-none');
+            document.getElementById('confirmTrackBtn').disabled = false;
+        }
+    });
+    
+    // Handle confirm track selection
+    document.getElementById('confirmTrackBtn').addEventListener('click', function() {
+        if (!selectedTrack) return;
+        
+        const trackId = document.getElementById('currentTrackId').value;
+        const fileId = document.getElementById('currentTrackId').getAttribute('data-file-id') || '';
+        const trackRow = document.getElementById('track-' + fileId + '-' + trackId);
+        
+        if (trackRow) {
+            // Update the row with the selected track
+            trackRow.innerHTML = 
+                '<td>' + trackId + '</td>' +
+                '<td class="fw-bold">' + selectedTrack.title + '</td>' +
+                '<td>' + selectedTrack.artist + '</td>' +
+                '<td>' + (selectedTrack.album || '') + '</td>' +
+                '<td>' +
+                '  <span class="badge bg-success">' +
+                '    <i class="bi bi-check-circle me-1"></i> Matched' +
+                '  </span>' +
+                '</td>';
+
+            // Update counters and progress
+            updateMatchCounters(1);
+
+            // Add hidden input for this ratingKey to the form, avoid duplicates
+            const form = document.getElementById('playlistForm');
+            if (form && selectedTrack.ratingKey) {
+                const existing = Array.from(form.querySelectorAll('input[name="track_ratingKey[]"]'))
+                    .some(inp => inp.value === selectedTrack.ratingKey);
+                if (!existing) {
+                    const inp = document.createElement('input');
+                    inp.type = 'hidden';
+                    inp.name = 'track_ratingKey[]';
+                    inp.value = selectedTrack.ratingKey;
+                    form.appendChild(inp);
+                }
+            }
+
+            // Close the modal
+            searchModal.hide();
+        }
+    });
+    
+    // No AJAX submit; rely on form POST for creation
+    
+    // Function to perform search
+    function performSearch(query, originalArtist = '') {
+        const resultsContainer = document.getElementById('searchResults');
+        // Show loading state
+        resultsContainer.innerHTML = 
+            '<div class="text-center py-4">' +
+            '  <div class="spinner-border text-primary" role="status">' +
+            '    <span class="visually-hidden">Loading...</span>' +
+            '  </div>' +
+            '  <p class="mt-2">Searching...</p>' +
+            '</div>';
+
+        fetch('{{ url_for("search_plex") }}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                query: query,
+                original_artist: originalArtist
+            })
+        })
+        .then(async response => {
+            const contentType = response.headers.get('content-type') || '';
+            if (!response.ok) {
+                // If redirected to login/index due to missing session
+                if (response.redirected || (!contentType.includes('application/json'))) {
+                    throw new Error('Session expired. Please start over.');
+                }
+            }
+            if (!contentType.includes('application/json')) {
+                throw new Error('Unexpected response.');
+            }
+            return response.json();
+        })
+        .then(data => {
+            if (!data.success) {
+                const msg = data.message || 'Search failed. Please try again.';
+                resultsContainer.innerHTML = 
+                    '<div class="alert alert-danger">' +
+                    '  <i class="bi bi-exclamation-triangle-fill me-2"></i>' +
+                    '  ' + msg +
+                    '</div>';
+                return;
+            }
+            if (data.results && data.results.length > 0) {
+                let html = '<div class="list-group list-group-flush">';
+                
+                data.results.forEach((track, index) => {
+                    const safeTitle = escapeHtml(track.title);
+                    const safeArtist = escapeHtml(track.artist);
+                    const safeAlbum = escapeHtml(track.album || '');
+                    const safeThumb = escapeHtml(track.thumb || '');
+                    const safeDuration = escapeHtml(track.duration || '');
+                    const safeRatingKey = escapeHtml(String(track.ratingKey || ''));
+                    const thumb = safeThumb ? 
+                        '<img src="' + safeThumb + '" class="rounded me-3" style="width: 40px; height: 40px; object-fit: cover;">' : 
+                        '<div class="bg-light rounded d-flex align-items-center justify-content-center me-3" style="width: 40px; height: 40px;"><i class="bi bi-music-note"></i></div>';
+                    
+                    html += 
+                        '<div class="list-group-item list-group-item-action search-result-item" ' +
+                        '     data-title="' + safeTitle + '" ' +
+                        '     data-artist="' + safeArtist + '" ' +
+                        '     data-album="' + safeAlbum + '" ' +
+                        '     data-rating-key="' + safeRatingKey + '" ' +
+                        '     data-thumb="' + safeThumb + '">' +
+                        '  <div class="d-flex align-items-center">' +
+                        '    ' + thumb +
+                        '    <div class="flex-grow-1">' +
+                        '      <div class="d-flex justify-content-between">' +
+                        '        <h6 class="mb-1">' + safeTitle + '</h6>' +
+                        '        <small class="text-muted">' + safeDuration + '</small>' +
+                        '      </div>' +
+                        '      <p class="mb-1 small text-muted">' + safeArtist + '</p>' +
+                        '      <small class="text-muted">' + safeAlbum + '</small>' +
+                        '    </div>' +
+                        '  </div>' +
+                        '</div>';
+                });
+                
+                html += '</div>';
+                resultsContainer.innerHTML = html;
+            } else {
+                resultsContainer.innerHTML = 
+                    '<div class="text-center py-4">' +
+                    '  <i class="bi bi-music-note-beamed text-muted" style="font-size: 2rem;"></i>' +
+                    '  <p class="mt-2 mb-0">No results found for "' + escapeHtml(query) + '"</p>' +
+                    '  <p class="small text-muted">Try a different search term</p>' +
+                    '</div>';
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            const message = (error && error.message) ? error.message : 'An error occurred while searching. Please try again.';
+            resultsContainer.innerHTML = 
+                '<div class="alert alert-danger">' +
+                '  <i class="bi bi-exclamation-triangle-fill me-2"></i>' +
+                '  ' + message +
+                '</div>';
+            if (message.includes('expired')) {
+                setTimeout(() => { window.location.href = '{{ url_for("index") }}'; }, 1500);
+            }
+        });
+    }
+    
+    // Function to update match counters and progress
+    function updateMatchCounters(change) {
+        const progressBar = document.getElementById('progressBar');
+        const totalTracks = parseInt('{{ total_tracks|default(0) }}', 10) || 1;
+
+        // Update the specific file's missing badge first
+        if (currentFileId) {
+            const fileBadge = document.querySelector('.file-missing-badge[data-file-id="' + currentFileId + '"]');
+            if (fileBadge) {
+                const cur = parseInt(fileBadge.textContent, 10) || 0;
+                fileBadge.textContent = Math.max(0, cur - change);
+            }
+        }
+
+        // Compute global missing as sum of all file badges
+        let totalMissing = 0;
+        document.querySelectorAll('.file-missing-badge').forEach(b => {
+            totalMissing += (parseInt(b.textContent, 10) || 0);
+        });
+
+        // Update progress bar and found count
+        if (progressBar) {
+            const currentFound = Math.max(0, totalTracks - totalMissing);
+            const newPercent = Math.round((currentFound / totalTracks) * 100);
+            progressBar.style.width = newPercent + '%';
+            progressBar.setAttribute('aria-valuenow', newPercent);
+            progressBar.textContent = newPercent + '%';
+            const foundCountElement = document.querySelector('.lead .badge.bg-success');
+            if (foundCountElement) {
+                foundCountElement.textContent = currentFound;
+            }
+        }
+
+        // Enable create playlist button when no missing remain
+        if (totalMissing === 0) {
+            document.getElementById('startSyncBtn').disabled = false;
+        }
+    }
+    
+    // Set progress bar width on page load
+    document.addEventListener('DOMContentLoaded', function() {
+        const progressBar = document.getElementById('progressBar');
+        if (progressBar) {
+            const progressPercent = '{{ progress_percent }}';
+            progressBar.style.width = progressPercent + '%';
+        }
+    });
+
+    // Helper function to escape HTML
+    function escapeHtml(unsafe) {
+        if (!unsafe) return '';
+        return String(unsafe)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+    }
+});
+</script>
+
+<style>
+.search-result-item {
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.search-result-item:hover {
+    background-color: #f8f9fa;
+}
+
+.search-result-item.active {
+    background-color: #e7f1ff;
+    border-left: 3px solid #0d6efd;
+}
+
+.progress {
+    overflow: visible;
+}
+
+.progress-bar {
+    transition: width 0.6s ease;
+    position: relative;
+}
+
+.progress-bar::after {
+    content: '';
+    position: absolute;
+    top: -5px;
+    right: -10px;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background-color: #198754;
+    border: 3px solid #fff;
+    box-shadow: 0 0 0 2px #198754;
+    display: none;
+}
+
+.progress-bar.animate::after {
+    display: block;
+    animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+    0% { transform: scale(0.8); opacity: 0.8; }
+    70% { transform: scale(1.2); opacity: 0.2; }
+    100% { transform: scale(0.8); opacity: 0.8; }
+}
+</style>
+{% endblock %}
