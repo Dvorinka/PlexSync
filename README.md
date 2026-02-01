@@ -2,7 +2,7 @@
 
 A web-based tool to sync your Spotify playlists with your Plex Music Library. Upload CSV exports from Spotify, match tracks with your Plex library, and create playlists automatically.
 
-![Plex Playlist Sync](./static/spotiflac.png)
+![Plex Playlist Sync](./static/plexsync.png)
 
 ## Features
 
